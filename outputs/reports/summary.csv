@@ -1,0 +1,4 @@
+,Last Price,Total Return,Ann. Return,Ann. Volatility,Sharpe,Max Drawdown,Best Day,Worst Day,SMA Strategy Return,Beta vs Benchmark
+AAPL,336.64,0.4821,0.2393,0.2874,0.8328,-0.3336,0.1533,-0.0925,0.0946,1.063
+MSFT,535.07,0.307,0.1765,0.2905,0.6078,-0.345,0.1551,-0.0999,0.0018,0.9353
+TSLA,382.7,0.6028,0.4137,0.5972,0.6927,-0.5377,0.2269,-0.1543,-0.0897,2.2697

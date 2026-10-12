@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Single-file stock analysis: load price data, clean it, compute returns, volatility and drawdown, and chart it.">
+<title>Stock Analysis Dashboard</title>
+<style>
+:root{--bg:#eceff6;--panel:#fff;--ink:#0f1633;--mute:#5b6485;--line:#dde2ee;--hero:#1b35e0;--c1:#2447f5;--c2:#e8472b;--c3:#0f9d6b;--c4:#8a3ffc;--sma1:#e6a100;--sma2:#64748b;--up:#0c8a5b;--down:#d63a24;--focus:#1b35e0}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1226;--panel:#161d3a;--ink:#eef1ff;--mute:#9aa5d1;--line:#262f58;--c1:#7b93ff;--c2:#ff8a6b;--c3:#3dd9a0;--c4:#b88cff;--sma1:#ffc21a;--sma2:#94a3b8;--up:#3dd9a0;--down:#ff8a6b;--focus:#9db0ff}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,.cp,.lead b{font-family:"Avenir Next","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif}
+.hero{background:var(--hero);color:#fff;position:relative;overflow:hidden;padding:clamp(28px,6vw,64px) 16px clamp(130px,20vw,220px)}
+.hero-in{max-width:1080px;margin:0 auto;position:relative;z-index:1;display:flex;gap:32px;justify-content:space-between;align-items:flex-end;flex-wrap:wrap}
+.hero h1{font-size:clamp(2.2rem,6.5vw,4.4rem);line-height:1;letter-spacing:-.035em;font-weight:800;margin:0 0 16px;max-width:11ch}
+.hero p{font:1.05rem/1.5 Georgia,"Times New Roman",serif;margin:0;max-width:44ch;opacity:.88}
+.lead{text-align:right}
+.lead b{display:block;font-size:clamp(2.8rem,9vw,6rem);line-height:.95;letter-spacing:-.04em;font-weight:800}
+.lead span{display:block;font-size:1.05rem;margin-top:6px;font-variant-numeric:tabular-nums}
+#cHero{position:absolute;left:0;right:0;bottom:0;width:100%;height:clamp(130px,20vw,220px);pointer-events:none}
+main{max-width:1080px;margin:0 auto;padding:24px 16px 48px}
+h2{font-size:1.1rem;margin:0 0 12px;font-weight:700;letter-spacing:-.01em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+.controls{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:end}
+label{display:block;font-size:.85rem;color:var(--mute);margin-bottom:4px}
+input,select,button{font:inherit;font-size:.95rem;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);width:100%}
+button{background:var(--hero);color:#fff;border-color:var(--hero);cursor:pointer;font-weight:700}
+button.alt{background:var(--panel);color:var(--ink);border-color:var(--line)}
+button:hover{filter:brightness(1.1)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1 1 140px}
+#status{margin-top:12px;font-size:.9rem;color:var(--mute)}
+#status.err{color:var(--down)}
+.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:16px}
+.card{width:auto;display:flex;flex-direction:column;gap:6px;text-align:left;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-top:5px solid var(--tc);border-radius:10px;padding:14px;font-weight:400}
+.card.on{box-shadow:0 0 0 2px var(--tc)}
+.ct{display:flex;justify-content:space-between;align-items:center;font-size:1.1rem}
+.pill{font-style:normal;font-size:.8rem;font-weight:700;padding:2px 9px;border-radius:99px;background:color-mix(in srgb,currentColor 14%,transparent)}
+.cp{font-size:1.9rem;font-weight:800;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.spark{width:100%;height:46px;display:block}
+.cs{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;font-size:.76rem;color:var(--mute)}
+.cw{position:relative}
+.chart{width:100%;height:300px;display:block}
+.chart.short{height:180px}
+.tip{position:absolute;top:6px;pointer-events:none;background:var(--ink);color:var(--panel);font-size:.78rem;padding:7px 10px;border-radius:6px;display:flex;flex-direction:column;gap:2px;white-space:nowrap;z-index:2}
+.tip i,.legend i{display:inline-block;width:10px;height:3px;margin-right:6px;vertical-align:middle}
+.vl{position:absolute;top:8px;bottom:22px;width:1px;background:var(--mute);pointer-events:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.85rem;color:var(--mute);margin:8px 0 12px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:640px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mute);font-weight:600}
+.up{color:var(--up)}.down{color:var(--down)}
+footer{color:var(--mute);font:.85rem/1.5 Georgia,serif;max-width:70ch}
+#cHero,.cw .chart{animation:reveal 1.2s cubic-bezier(.2,.7,.2,1) both}
+@keyframes reveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+@media(max-width:560px){.chart{height:240px}.lead{text-align:left}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-in">
+    <div><h1>Who is winning, and at what risk?</h1>
+    <p>Daily prices, cleaned and compared across tickers: return, volatility, drawdown and a moving-average view.</p></div>
+    <div class="lead" aria-live="polite"><b id="leadT">&mdash;</b><span id="leadR">Load data to see the leader</span></div>
+  </div>
+  <canvas id="cHero" aria-hidden="true"></canvas>
+</header>
+<main>
+
+<section class="panel" aria-labelledby="cfg">
+  <h2 id="cfg">Configuration</h2>
+  <div class="controls">
+    <div><label for="tickers">Tickers (comma separated)</label><input id="tickers" value="AAPL, MSFT, TSLA"></div>
+    <div><label for="range">Period</label>
+      <select id="range"><option value="3mo">3 months</option><option value="6mo">6 months</option><option value="1y" selected>1 year</option><option value="2y">2 years</option></select></div>
+    <div><label for="csv">Or load yfinance CSV files</label><input id="csv" type="file" accept=".csv" multiple></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button id="btnSample">Use sample data</button>
+    <button id="btnLive" class="alt">Fetch from Yahoo Finance</button>
+  </div>
+  <div id="status" role="status" aria-live="polite">Load data to begin.</div>
+</section>
+
+<div id="results" hidden>
+  <section id="cards" class="cards" aria-label="Tickers. Select one to chart it."></section>
+  <section class="panel" aria-labelledby="sum">
+    <h2 id="sum">Summary</h2>
+    <div class="scroll"><table id="summary"></table></div>
+  </section>
+  <section class="panel" aria-labelledby="pc">
+    <div class="row" style="align-items:end;margin-bottom:8px"><h2 id="pc" style="flex:3;margin:0">Price with moving averages</h2>
+    <div style="flex:1"><label for="pick">Ticker</label><select id="pick"></select></div></div>
+    <div class="cw"><canvas id="cPrice" class="chart" role="img" aria-label="Price chart with 20 and 50 day moving averages"></canvas><div class="tip" hidden></div><div class="vl" hidden></div></div>
+    <div class="legend" id="lgPrice"></div>
+    <div class="cw"><canvas id="cVol" class="chart short" role="img" aria-label="Trading volume chart"></canvas><div class="tip" hidden></div><div class="vl" hidden></div></div>
+  </section>
+  <section class="panel" aria-labelledby="cr">
+    <h2 id="cr">Cumulative return, all tickers</h2>
+    <div class="cw"><canvas id="cCum" class="chart" role="img" aria-label="Cumulative return comparison"></canvas><div class="tip" hidden></div><div class="vl" hidden></div></div>
+    <div class="legend" id="lgCum"></div>
+  </section>
+  <section class="panel" aria-labelledby="dd">
+    <h2 id="dd">Drawdown from peak</h2>
+    <div class="cw"><canvas id="cDD" class="chart short" role="img" aria-label="Drawdown chart"></canvas><div class="tip" hidden></div><div class="vl" hidden></div></div>
+  </section>
+</div>
+
+<footer>Run <code>python main.py</code> to load real yfinance data here. Without it, the page shows synthetic sample data for demonstration only. Live fetch calls Yahoo Finance directly from your browser, which many browsers block (CORS). If it fails, export CSVs with <code>yf.download("AAPL").to_csv("AAPL.csv")</code> and load them above. Not financial advice.</footer>
+</main>
+
+<script src="data.js"></script>
+<script>
+"use strict";
+/* ===== 1. CONFIG ===== */
+const CONFIG = { tradingDays: 252, smaShort: 20, smaLong: 50, colors: ["--c1","--c2","--c3","--c4"] };
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let STATE = {};   // ticker -> analysed record
+
+/* ===== 2. FETCH / LOAD ===== */
+function seeded(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function sampleData(ticker, days){
+  let h=0; for(const ch of ticker) h=(h*31+ch.charCodeAt(0))|0;
+  const rnd=seeded(h), rows=[], d=new Date(); d.setHours(0,0,0,0);
+  const dates=[]; while(dates.length<days){ if(d.getDay()%6) dates.unshift(new Date(d)); d.setDate(d.getDate()-1); }
+  let p=60+rnd()*200;
+  const drift=(rnd()-.4)*0.0012, vol=0.012+rnd()*0.014;
+  for(const dt of dates){
+    const z=(rnd()+rnd()+rnd()-1.5)*2, o=p; p=p*Math.exp(drift+vol*z);
+    const hi=Math.max(o,p)*(1+rnd()*0.008), lo=Math.min(o,p)*(1-rnd()*0.008);
+    rows.push({date:dt,open:o,high:hi,low:lo,close:p,volume:Math.round(2e7*(0.6+rnd()))});
+  }
+  return rows;
+}
+async function fetchLive(ticker, range){
+  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=1d`;
+  const r=await fetch(url); if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j=await r.json(), res=j.chart && j.chart.result && j.chart.result[0];
+  if(!res) throw new Error("No data returned for "+ticker);
+  const q=res.indicators.quote[0];
+  return res.timestamp.map((t,i)=>({date:new Date(t*1000),open:q.open[i],high:q.high[i],low:q.low[i],close:q.close[i],volume:q.volume[i]}));
+}
+function parseCSV(text){
+  const lines=text.trim().split(/\r?\n/).map(l=>l.split(","));
+  const head=lines[0].map(s=>s.trim().toLowerCase());
+  const col=n=>head.indexOf(n);
+  const ix={date:Math.max(col("date"),0),open:col("open"),high:col("high"),low:col("low"),close:col("close"),volume:col("volume")};
+  if(ix.close<0) throw new Error("CSV needs a Close column");
+  return lines.slice(1).map(c=>({date:new Date(c[ix.date]),open:+c[ix.open],high:+c[ix.high],low:+c[ix.low],close:+c[ix.close],volume:+c[ix.volume]}));
+}
+
+/* ===== 3. CLEAN ===== */
+function clean(rows){
+  return rows.filter(r=>r.date instanceof Date && !isNaN(r.date) && Number.isFinite(r.close) && r.close>0)
+    .map(r=>({...r,volume:Number.isFinite(r.volume)?r.volume:0}))
+    .sort((a,b)=>a.date-b.date);
+}
+
+/* ===== 4. ANALYZE ===== */
+function sma(arr,n){return arr.map((_,i)=>i<n-1?null:arr.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n)}
+function analyze(ticker, rows){
+  const close=rows.map(r=>r.close);
+  const ret=close.map((c,i)=>i?c/close[i-1]-1:0);
+  const rr=ret.slice(1), mean=rr.reduce((a,b)=>a+b,0)/rr.length;
+  const sd=Math.sqrt(rr.reduce((a,b)=>a+(b-mean)**2,0)/(rr.length-1));
+  const cum=close.map(c=>c/close[0]-1);
+  let peak=-Infinity; const dd=close.map(c=>{peak=Math.max(peak,c);return c/peak-1});
+  return {ticker,rows,close,ret,cum,dd,
+    sma20:sma(close,CONFIG.smaShort),sma50:sma(close,CONFIG.smaLong),
+    total:cum[cum.length-1],
+    annRet:mean*CONFIG.tradingDays,
+    vol:sd*Math.sqrt(CONFIG.tradingDays),
+    sharpe:sd?mean/sd*Math.sqrt(CONFIG.tradingDays):0,
+    maxDD:Math.min(...dd),
+    best:Math.max(...rr),worst:Math.min(...rr),last:close[close.length-1]};
+}
+
+/* ===== 5. VISUALIZE ===== */
+function setupCanvas(cv){
+  const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
+  cv.width=w*dpr; cv.height=h*dpr;
+  const g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+  return {g,w,h};
+}
+function drawChart(cv, dates, series, opt={}){
+  const {g,w,h}=setupCanvas(cv), m={l:56,r:10,t:8,b:22};
+  const line=css("--line"), mute=css("--mute");
+  const vals=series.flatMap(s=>s.data.filter(v=>v!=null));
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  if(opt.bars) lo=0; if(lo===hi){lo-=1;hi+=1}
+  const pad=(hi-lo)*0.05; if(!opt.bars) {lo-=pad;} hi+=pad;
+  const n=dates.length, X=i=>m.l+(w-m.l-m.r)*(n>1?i/(n-1):0), Y=v=>m.t+(h-m.t-m.b)*(1-(v-lo)/(hi-lo));
+  const fmt=opt.fmt||(v=>v.toFixed(0));
+  g.font="12px system-ui,sans-serif"; g.fillStyle=mute; g.strokeStyle=line; g.lineWidth=1;
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4,y=Y(v);g.beginPath();g.moveTo(m.l,y);g.lineTo(w-m.r,y);g.stroke();g.textAlign="right";g.fillText(fmt(v),m.l-6,y+4)}
+  g.textAlign="center";
+  for(let k=0;k<=4;k++){const i=Math.round((n-1)*k/4);g.fillText(dates[i].toLocaleDateString(undefined,{month:"short",year:"2-digit"}),Math.min(Math.max(X(i),m.l+16),w-m.r-16),h-6)}
+  g.lineJoin="round"; cv._m={dates,series,fmt2:opt.fmt2||fmt,m,w,n};
+  if(opt.area&&!opt.bars){const s0=series[0],gr=g.createLinearGradient(0,m.t,0,h-m.b);gr.addColorStop(0,s0.color+"44");gr.addColorStop(1,s0.color+"00");g.beginPath();let st=false;s0.data.forEach((v,i)=>{if(v==null)return;st?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v));st=true});g.lineTo(X(n-1),h-m.b);g.lineTo(X(0),h-m.b);g.closePath();g.fillStyle=gr;g.fill()}
+  if(opt.zero&&lo<0&&hi>0){g.strokeStyle=mute;g.beginPath();g.moveTo(m.l,Y(0));g.lineTo(w-m.r,Y(0));g.stroke()}
+  for(const s of series){
+    g.strokeStyle=s.color;g.fillStyle=s.color;g.lineWidth=s.width||1.8;
+    if(opt.bars){const bw=Math.max(1,(w-m.l-m.r)/n-1);s.data.forEach((v,i)=>g.fillRect(X(i)-bw/2,Y(v),bw,Y(0)-Y(v)))}
+    else{g.beginPath();let on=false;s.data.forEach((v,i)=>{if(v==null){on=false;return}on?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v));on=true});g.stroke()}
+  }
+}
+const pct=v=>(v*100).toFixed(1)+"%";
+function legend(el,items){el.innerHTML=items.map(([n,c])=>`<span><i style="background:${c}"></i>${n}</span>`).join("")}
+function render(){
+  const list=Object.values(STATE); if(!list.length) return;
+  const sel=$("pick").value||list[0].ticker, s=STATE[sel], d=s.rows.map(r=>r.date), idx=list.indexOf(s);
+  const col=i=>css(CONFIG.colors[i%4]), money=v=>"$"+v.toFixed(2), pc=v=>(v*100).toFixed(1)+"%";
+  drawChart($("cPrice"),d,[{name:s.ticker,data:s.close,color:col(idx)},{name:"SMA "+CONFIG.smaShort,data:s.sma20,color:css("--sma1"),width:1.4},{name:"SMA "+CONFIG.smaLong,data:s.sma50,color:css("--sma2"),width:1.4}],{fmt:v=>"$"+v.toFixed(0),fmt2:money,area:true});
+  legend($("lgPrice"),[[s.ticker+" close",col(idx)],["SMA "+CONFIG.smaShort,css("--sma1")],["SMA "+CONFIG.smaLong,css("--sma2")]]);
+  drawChart($("cVol"),d,[{name:"Volume",data:s.rows.map(r=>r.volume),color:col(idx)}],{bars:true,fmt:v=>(v/1e6).toFixed(0)+"M",fmt2:v=>(v/1e6).toFixed(1)+"M"});
+  const L=Math.min(...list.map(x=>x.close.length)), cd=list[0].rows.slice(-L).map(r=>r.date);
+  drawChart($("cCum"),cd,list.map((x,i)=>({name:x.ticker,data:x.cum.slice(-L),color:col(i)})),{fmt:v=>(v*100).toFixed(0)+"%",fmt2:pc,zero:true});
+  legend($("lgCum"),list.map((x,i)=>[x.ticker,col(i)]));
+  drawChart($("cDD"),cd,list.map((x,i)=>({name:x.ticker,data:x.dd.slice(-L),color:col(i),width:1.4})),{fmt:v=>(v*100).toFixed(0)+"%",fmt2:pc});
+  drawHero(list); drawSparks(list,sel);
+}
+function drawHero(list){
+  const cv=$("cHero"),{g,w,h}=setupCanvas(cv), L=Math.min(...list.map(x=>x.cum.length));
+  const all=list.flatMap(x=>x.cum.slice(-L)), lo=Math.min(...all), hi=Math.max(...all);
+  const X=i=>w*i/(L-1), Y=v=>h*0.12+h*0.8*(1-(v-lo)/((hi-lo)||1));
+  const lead=[...list].sort((a,b)=>b.total-a.total)[0];
+  list.forEach(x=>{
+    const isLead=x===lead, data=x.cum.slice(-L);
+    g.beginPath(); data.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v)));
+    if(isLead){const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,"rgba(255,255,255,.28)");gr.addColorStop(1,"rgba(255,255,255,0)");
+      g.save();g.lineTo(w,h);g.lineTo(0,h);g.fillStyle=gr;g.fill();g.restore();
+      g.beginPath(); data.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v)))}
+    g.strokeStyle=isLead?"#fff":"rgba(255,255,255,.35)"; g.lineWidth=isLead?3:1.5; g.lineJoin="round"; g.stroke();
+    if(isLead){g.beginPath();g.arc(X(L-1)-6,Y(data[L-1]),5,0,7);g.fillStyle="#fff";g.fill()}
+  });
+  $("leadT").textContent=lead.ticker;
+  $("leadR").textContent=(lead.total>=0?"+":"")+pct(lead.total)+" since "+lead.rows[0].date.toLocaleDateString(undefined,{month:"short",year:"numeric"});
+}
+function drawSparks(list,sel){
+  document.querySelectorAll("#cards .card").forEach((el,i)=>{
+    const x=list[i], cv=el.querySelector("canvas"), {g,w,h}=setupCanvas(cv), c=css(CONFIG.colors[i%4]);
+    const lo=Math.min(...x.close), hi=Math.max(...x.close), X=k=>w*k/(x.close.length-1), Y=v=>3+(h-6)*(1-(v-lo)/((hi-lo)||1));
+    g.beginPath(); x.close.forEach((v,k)=>k?g.lineTo(X(k),Y(v)):g.moveTo(X(k),Y(v)));
+    g.strokeStyle=c; g.lineWidth=1.8; g.lineJoin="round"; g.stroke();
+    g.lineTo(w,h); g.lineTo(0,h); const gr=g.createLinearGradient(0,0,0,h); gr.addColorStop(0,c+"40"); gr.addColorStop(1,c+"00"); g.fillStyle=gr; g.fill();
+    el.classList.toggle("on",x.ticker===sel);
+  });
+}
+function buildCards(list){
+  $("cards").innerHTML=list.map((s,i)=>`<button type="button" class="card" data-t="${s.ticker}" style="--tc:var(${CONFIG.colors[i%4]})"><span class="ct"><b>${s.ticker}</b><em class="pill ${s.total>=0?"up":"down"}">${s.total>=0?"+":""}${pct(s.total)}</em></span><span class="cp">$${s.last.toFixed(2)}</span><canvas class="spark" aria-hidden="true"></canvas><span class="cs"><span>Vol ${pct(s.vol)}</span><span>Sharpe ${s.sharpe.toFixed(2)}</span><span>Max DD ${pct(s.maxDD)}</span></span></button>`).join("");
+}
+function hover(cv){
+  const box=cv.parentElement, tip=box.querySelector(".tip"), vl=box.querySelector(".vl");
+  cv.addEventListener("pointermove",e=>{
+    const M=cv._m; if(!M) return; const x=e.clientX-cv.getBoundingClientRect().left, span=M.w-M.m.l-M.m.r;
+    const i=Math.max(0,Math.min(M.n-1,Math.round((x-M.m.l)/span*(M.n-1)))), px=M.m.l+span*(M.n>1?i/(M.n-1):0);
+    vl.style.left=px+"px"; vl.hidden=false;
+    tip.innerHTML="<b>"+M.dates[i].toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})+"</b>"+M.series.filter(s=>s.data[i]!=null).map(s=>`<span><i style="background:${s.color}"></i>${s.name} ${M.fmt2(s.data[i])}</span>`).join("");
+    tip.hidden=false; tip.style.left=Math.max(4,Math.min(px+12,M.w-tip.offsetWidth-4))+"px";
+  });
+  cv.addEventListener("pointerleave",()=>{tip.hidden=true;vl.hidden=true});
+}
+function renderTable(){
+  const list=Object.values(STATE), cls=v=>v>=0?"up":"down"; buildCards(list);
+  $("summary").innerHTML="<thead><tr><th>Ticker</th><th>Last</th><th>Total return</th><th>Ann. volatility</th><th>Sharpe</th><th>Max drawdown</th><th>Best day</th><th>Worst day</th></tr></thead><tbody>"+
+  list.map(s=>`<tr><td><b>${s.ticker}</b></td><td>${s.last.toFixed(2)}</td><td class="${cls(s.total)}">${pct(s.total)}</td><td>${pct(s.vol)}</td><td>${s.sharpe.toFixed(2)}</td><td class="down">${pct(s.maxDD)}</td><td class="up">${pct(s.best)}</td><td class="down">${pct(s.worst)}</td></tr>`).join("")+"</tbody>";
+  $("pick").innerHTML=list.map(s=>`<option>${s.ticker}</option>`).join("");
+}
+
+/* ===== 6. MAIN ===== */
+function status(msg,err){const e=$("status");e.textContent=msg;e.className=err?"err":""}
+function show(dataByTicker,note){
+  STATE={};
+  for(const [t,rows] of Object.entries(dataByTicker)){
+    const c=clean(rows); if(c.length<CONFIG.smaLong+2) throw new Error(`${t}: not enough valid rows (${c.length})`);
+    STATE[t]=analyze(t,c);
+  }
+  $("results").hidden=false; renderTable(); render();
+  status(note+" Loaded "+Object.keys(STATE).join(", ")+".");
+}
+const tickerList=()=>$("tickers").value.split(",").map(s=>s.trim().toUpperCase()).filter(Boolean).slice(0,4);
+const rangeDays={"3mo":63,"6mo":126,"1y":252,"2y":504};
+$("btnSample").onclick=()=>{try{const o={};tickerList().forEach(t=>o[t]=sampleData(t,Math.max(rangeDays[$("range").value],CONFIG.smaLong+2)));show(o,"Using synthetic sample data.")}catch(e){status(e.message,true)}};
+$("btnLive").onclick=async()=>{
+  status("Fetching from Yahoo Finance…");
+  try{const o={};for(const t of tickerList()) o[t]=await fetchLive(t,$("range").value);show(o,"Live data.")}
+  catch(e){status("Live fetch failed ("+e.message+"). Your browser likely blocked it. Use sample data or load CSV files exported with yfinance.",true)}
+};
+$("csv").onchange=async ev=>{
+  try{const o={};for(const f of ev.target.files) o[f.name.replace(/\.csv$/i,"").toUpperCase()]=parseCSV(await f.text());
+    show(o,"From CSV files.")}catch(e){status(e.message,true)}
+};
+["cPrice","cVol","cCum","cDD"].forEach(id=>hover($(id)));
+$("cards").onclick=e=>{const b=e.target.closest(".card");if(b){$("pick").value=b.dataset.t;render()}};
+$("pick").onchange=render;
+addEventListener("resize",render);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",render);
+if(window.PRELOADED){
+  const o={}; for(const [t,rows] of Object.entries(PRELOADED.series)) o[t]=rows.map(r=>({date:new Date(r.d),open:r.o,high:r.h,low:r.l,close:r.c,volume:r.v}));
+  $("tickers").value=Object.keys(o).join(", ");
+  try{show(o,"Real data from "+PRELOADED.meta.source+", generated "+PRELOADED.meta.generated+" (period "+PRELOADED.meta.period+").")}catch(e){status(e.message,true)}
+}else{ $("btnSample").click(); status("No data.js found. Showing synthetic sample data. Run python main.py to load real data.") }
+</script>
+</body>
+</html>
